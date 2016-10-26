@@ -1,0 +1,270 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.zte.system.report.ReportDao">
+
+	<!-- getReportDepts -->
+	<select id="getReportDepts" resultType="map">
+		select id,name from
+		PRDM_HR_PRODUCT_STATISTICS_VIEW
+	</select>
+
+	<!-- getAssignDays -->
+	<select id="getAssignDays" parameterType="map" resultType="Float">
+		SELECT SUM(
+		CASE		
+        WHEN enter_date >= to_date(#{startDate},'yyyy-MM-dd') AND leave_date IS NOT NULL AND leave_date &lt;= to_date(#{endDate}, 'yyyy-MM-dd') THEN (leave_date - enter_date +1 - (SELECT
+		COUNT(1) from prdm_holiday h WHERE h.holiday BETWEEN enter_date AND
+		leave_date))
+        WHEN enter_date >= to_date(#{startDate},'yyyy-MM-dd') AND leave_date IS NOT NULL AND leave_date > to_date(#{endDate}, 'yyyy-MM-dd') THEN (to_date(#{endDate},'yyyy-MM-dd') -
+		enter_date+1 - (SELECT COUNT(1) from prdm_holiday h2 WHERE h2.holiday
+		BETWEEN enter_date AND to_date(#{endDate},'yyyy-MM-dd')))
+        WHEN enter_date >= to_date(#{startDate},'yyyy-MM-dd') AND leave_date IS NULL THEN (to_date(#{endDate},'yyyy-MM-dd') -
+		enter_date+1 - (SELECT COUNT(1) from prdm_holiday h2 WHERE h2.holiday
+		BETWEEN enter_date AND to_date(#{endDate},'yyyy-MM-dd')))
+        WHEN enter_date &lt; to_date(#{startDate},'yyyy-MM-dd') AND leave_date IS NOT NULL AND leave_date &lt;= to_date(#{endDate}, 'yyyy-MM-dd') THEN (leave_date - to_date(#{startDate},'yyyy-MM-dd') +1 - (SELECT
+		COUNT(1) from prdm_holiday h WHERE h.holiday BETWEEN to_date(#{startDate},'yyyy-MM-dd') AND
+		leave_date))
+        WHEN enter_date &lt; to_date(#{startDate},'yyyy-MM-dd') AND leave_date IS NOT NULL AND leave_date > to_date(#{endDate}, 'yyyy-MM-dd') THEN (to_date(#{endDate},'yyyy-MM-dd') -
+		to_date(#{startDate},'yyyy-MM-dd')+1 - (SELECT COUNT(1) from prdm_holiday h2 WHERE h2.holiday
+		BETWEEN to_date(#{startDate},'yyyy-MM-dd') AND to_date(#{endDate},'yyyy-MM-dd')))
+        WHEN enter_date &lt; to_date(#{startDate},'yyyy-MM-dd') AND leave_date IS NULL THEN (to_date(#{endDate},'yyyy-MM-dd') -
+		to_date(#{startDate},'yyyy-MM-dd')+1 - (SELECT COUNT(1) from prdm_holiday h2 WHERE h2.holiday
+		BETWEEN to_date(#{startDate},'yyyy-MM-dd') AND to_date(#{endDate},'yyyy-MM-dd')))
+        ELSE 0 END) days
+		FROM prdm_employee_department_active
+		WHERE product_line_id = #{product_line_id}
+		AND enter_date &lt;= 
+		to_date(#{endDate},'yyyy-MM-dd')
+		AND ( leave_date >= to_date(#{startDate},'yyyy-MM-dd') OR leave_date IS NULL)
+		<!-- GROUP BY product_line_id -->
+	</select>
+
+	<!-- getProjectDays -->
+	<select id="getProjectDays" parameterType="map" resultType="Float">
+		SELECT SUM(w.work_days) FROM prdm_employee_department_active_day d LEFT JOIN prdm_hr_work_detail_view w 
+        on d.employee_num = w.employee_num AND d.day = w.work_date 
+        WHERE 
+        (SELECT h.holiday FROM prdm_holiday h WHERE h.holiday = d.day) IS NULL
+        AND (w.work_days IS NOT NULL AND w.state != 'reject' AND w.project_num IS NOT NULL)
+        AND d.product_line_id = #{product_line_id} 
+        AND d.day BETWEEN to_date(#{startDate}, 'yyyy-MM-dd') AND to_date(#{endDate}, 'yyyy-MM-dd')
+	</select>
+
+	<!-- getOtherDays -->
+	<select id="getOtherDays" parameterType="map" resultType="Float">
+		SELECT
+		SUM(w.work_days) FROM prdm_hr_work_detail_view w
+		WHERE
+		w.project_num IS
+		NULL AND w.state != 'reject'
+		AND w.work_date BETWEEN
+		to_date(#{startDate},'yyyy-MM-dd') AND
+		to_date(#{endDate},'yyyy-MM-dd')
+		AND (SELECT h.holiday from
+		prdm_holiday h WHERE h.holiday = w.work_date) IS
+		NULL 
+        AND (SELECT d.product_line_id FROM prdm_employee_department_active d WHERE
+        d.employee_num = w.employee_num AND
+        w.work_date BETWEEN d.enter_date AND
+        CASE 
+        WHEN d.leave_date IS NULL THEN to_date('2016-10-30','yyyy-MM-dd')
+        WHEN d.leave_date IS NOT NULL THEN d.leave_date
+        ELSE d.leave_date
+        END
+        LIMIT 1) = #{product_line_id}
+		<!-- GROUP BY
+		project_undertaking_org -->
+	</select>
+
+	<!-- getLinesDetailOne -->
+	<select id="getLinesDetailOne" parameterType="map" resultType="map">
+	    SELECT product_line_name,employee_name,employee_num,
+    
+        CASE 
+	    WHEN enter_date >= to_date(#{startDate},'yyyy-MM-dd') THEN to_char(enter_date, 'yyyy-MM-dd')
+        WHEN enter_date &lt; to_date(#{startDate},'yyyy-MM-dd') THEN #{startDate}
+        ELSE #{startDate} 
+        END  
+		 || '~' ||
+		CASE
+		WHEN leave_date IS NOT
+		NULL AND leave_date &lt;= to_date(#{endDate},'yyyy-MM-dd') THEN
+		to_char(leave_date, 'yyyy-MM-dd')
+		WHEN leave_date IS NOT NULL AND
+		leave_date > to_date(#{endDate},'yyyy-MM-dd') THEN
+		#{endDate}
+		WHEN
+		leave_date IS NULL THEN #{endDate}
+		ELSE to_char(leave_date,
+		'yyyy-MM-dd') END as period_date,
+		
+		(CASE
+		
+        WHEN enter_date >= to_date(#{startDate}, 'yyyy-MM-dd') AND leave_date IS NOT NULL AND leave_date &lt;=
+		to_date(#{endDate},'yyyy-MM-dd')
+		THEN (leave_date-enter_date+1-(SELECT
+		COUNT(1) from prdm_holiday h WHERE
+		h.holiday BETWEEN enter_date AND
+		leave_date))
+		
+        WHEN enter_date >= to_date(#{startDate}, 'yyyy-MM-dd') AND leave_date IS NULL AND leave_date >
+		to_date(#{endDate},'yyyy-MM-dd')
+		THEN (to_date(#{endDate},
+		'yyyy-MM-dd')-enter_date+1-(SELECT COUNT(1)
+		FROM prdm_holiday h WHERE
+		h.holiday BETWEEN enter_date AND
+		to_date(#{endDate}, 'yyyy-MM-dd')))
+
+		WHEN enter_date >= to_date(#{startDate}, 'yyyy-MM-dd') AND leave_date IS NULL
+		THEN (to_date(#{endDate},
+		'yyyy-MM-dd')-enter_date+1-(SELECT COUNT(1)
+		FROM prdm_holiday h WHERE
+		h.holiday BETWEEN enter_date AND
+		to_date(#{endDate}, 'yyyy-MM-dd')))
+
+
+        WHEN enter_date &lt; to_date(#{startDate}, 'yyyy-MM-dd') AND leave_date IS NOT NULL AND leave_date &lt;=
+		to_date(#{endDate},'yyyy-MM-dd')
+		THEN (leave_date-to_date(#{startDate}, 'yyyy-MM-dd')+1-(SELECT
+		COUNT(1) from prdm_holiday h WHERE
+		h.holiday BETWEEN to_date(#{startDate}, 'yyyy-MM-dd') AND
+		leave_date))
+		
+        WHEN enter_date &lt; to_date(#{startDate}, 'yyyy-MM-dd') AND leave_date IS NULL AND leave_date >
+		to_date(#{endDate},'yyyy-MM-dd')
+		THEN (to_date(#{endDate},
+		'yyyy-MM-dd')-to_date(#{startDate}, 'yyyy-MM-dd')+1-(SELECT COUNT(1)
+		FROM prdm_holiday h WHERE
+		h.holiday BETWEEN to_date(#{startDate}, 'yyyy-MM-dd') AND
+		to_date(#{endDate}, 'yyyy-MM-dd')))
+
+		WHEN enter_date &lt; to_date(#{startDate}, 'yyyy-MM-dd') AND leave_date IS NULL
+		THEN (to_date(#{endDate},
+		'yyyy-MM-dd')-to_date(#{startDate}, 'yyyy-MM-dd')+1-(SELECT COUNT(1)
+		FROM prdm_holiday h WHERE
+		h.holiday BETWEEN to_date(#{startDate}, 'yyyy-MM-dd') AND
+		to_date(#{endDate}, 'yyyy-MM-dd')))
+
+		ELSE (to_date(#{endDate}, 'yyyy-MM-dd')-enter_date+1-(SELECT COUNT(1)
+		FROM prdm_holiday h WHERE h.holiday BETWEEN enter_date AND
+		to_date(#{endDate}, 'yyyy-MM-dd')))
+		END) assignDays,
+		
+		<!-- projectdays -->
+		(SELECT SUM(v.work_days) from prdm_hr_work_detail_view v WHERE
+		v.employee_num = a.employee_num AND
+		(SELECT h.holiday FROM prdm_holiday
+		h WHERE h.holiday = v.work_date) IS NULL
+		AND v.state != 'reject'
+		AND
+		v.project_num IS NOT NULL 
+		<!-- AND v.project_undertaking_org = (SELECT
+		de.name FROM prdm_hr_product_statistics_view de WHERE de.id =
+		to_number(#{deptId},'999999999999'))  -->
+		AND
+		v.work_date BETWEEN
+		to_date(#{startDate}, 'yyyy-MM-dd') AND to_date(#{endDate},
+		'yyyy-MM-dd')
+		) projectDays,
+        
+        <!-- otherDays --> 
+		(SELECT SUM(v.work_days) from prdm_hr_work_detail_view v WHERE
+		v.employee_num = a.employee_num AND
+		(SELECT h.holiday FROM prdm_holiday
+		h WHERE h.holiday = v.work_date) IS NULL
+		AND v.state != 'reject'
+		AND
+		v.project_num IS NULL AND v.work_date BETWEEN
+		to_date(#{startDate},
+		'yyyy-MM-dd') AND to_date(#{endDate}, 'yyyy-MM-dd')
+		) otherDays
+
+		FROM
+		prdm_employee_department_active a WHERE 
+		<if test="deptId != null and deptId != '-1' ">
+		    product_line_name = (SELECT de.name FROM prdm_hr_product_statistics_view de WHERE 
+		    de.id = to_number(#{deptId},'999999999999'))
+		</if>
+		<if test="deptId == null or deptId == '-1'">
+			(select dep.id from prdm_hr_product_statistics_view dep WHERE dep.name = product_line_name limit 1) IN (15,16,17,21,22,25,31,32))
+		</if>
+		AND enter_date &lt;= to_date(#{endDate},'yyyy-MM-dd') 
+        AND (leave_date >= to_date(#{startDate},'yyyy-MM-dd') OR leave_date IS NULL)
+	</select>
+
+	<!-- getLinesDetailTwo -->
+	<select id="getLinesDetailTwo" parameterType="map" resultType="map">
+		SELECT w.project_undertaking_org,w.employee_name,w.employee_num,w.project_name,w.project_num,
+		(#{startDate} || '~' || #{endDate}) period_date,d.product_line_name,w.project_type,w.work_days,
+		CASE WHEN w.state = 'draft' THEN '草稿'
+		WHEN w.state = 'confirm' THEN '确认'
+		WHEN w.state = 'finished' THEN '通过'
+		WHEN w.state = 'reject' THEN '驳回'
+		ELSE '驳回' END state,
+		to_char(w.work_date, 'yyyy-MM-dd') work_date,
+        (SELECT p2.project_manager_name FROM prdm_project p2 WHERE p2.num =
+		w.project_num LIMIT 1) project_manager_name
+        FROM prdm_employee_department_active_day d LEFT JOIN prdm_hr_work_detail_view w 
+        on d.employee_num = w.employee_num AND d.day = w.work_date 
+        WHERE 
+        (SELECT h.holiday FROM prdm_holiday h WHERE h.holiday = d.day) IS NULL
+        AND (w.work_days IS NOT NULL AND w.state != 'reject' AND w.project_num IS NOT NULL)
+         <if test="deptId != null and deptId != '-1' ">
+			AND d.product_line_id = to_number(#{deptId},'999999999999')
+		</if>
+		<if test="deptId == null or deptId == '-1'">
+			AND d.product_line_id IN (15,16,17,21,22,25,31,32)
+		</if>
+		AND d.day BETWEEN to_date(#{startDate}, 'yyyy-MM-dd') AND to_date(#{endDate}, 'yyyy-MM-dd')
+	</select>
+    
+    <!-- getLinesDetailThree -->
+    <select id="getLinesDetailThree" parameterType="map" resultType="map">
+        SELECT d.product_line_name,w.employee_name,w.employee_num,#{startDate} || '~' || #{endDate} period_date,w.work_days,
+        CASE WHEN w.state = 'draft' THEN '草稿'
+		WHEN w.state = 'confirm' THEN '确认'
+		WHEN w.state = 'finished' THEN '通过'
+		WHEN w.state = 'reject' THEN '驳回'
+		ELSE '通过' END state,
+        to_char(w.work_date, 'yyyy-MM-dd') work_date,w.tmp_project_name
+        FROM prdm_employee_department_active_day d LEFT JOIN prdm_hr_work_detail_view w 
+        on d.employee_num = w.employee_num AND d.day = w.work_date 
+        WHERE 
+        (SELECT h.holiday FROM prdm_holiday h WHERE h.holiday = d.day) IS NULL
+        AND (w.work_days IS NOT NULL AND w.state != 'reject' AND w.project_num IS NULL)
+        <if test="deptId != null and deptId != '-1' ">
+			AND d.product_line_id = to_number(#{deptId},'999999999999')
+		</if>
+		<if test="deptId == null or deptId == '-1'">
+			AND d.product_line_id IN (15,16,17,21,22,25,31,32)
+		</if>
+		AND d.day BETWEEN to_date(#{startDate}, 'yyyy-MM-dd') AND to_date(#{endDate}, 'yyyy-MM-dd')
+    </select>
+    
+    <!-- getLinesDetailFour -->
+    <select id="getLinesDetailFour" parameterType="map" resultType="map">
+        SELECT d.product_line_name,d.employee_name,d.employee_num,
+        #{startDate} || '~' || #{endDate} period_date,w.project_name,w.project_num,
+        w.project_undertaking_org,w.project_type,w.work_days,
+        CASE WHEN w.state = 'draft' THEN '草稿'
+		WHEN w.state = 'confirm' THEN '确认'
+		WHEN w.state = 'finished' THEN '通过'
+		WHEN w.state = 'reject' THEN '驳回'
+		ELSE '' END state,
+        to_char(d.day, 'yyyy-MM-dd') work_date,
+        (SELECT p.project_manager_name FROM prdm_project p WHERE p.num = w.project_num LIMIT 1) project_manager_name
+        FROM prdm_employee_department_active_day d LEFT JOIN prdm_hr_work_detail_view w 
+        on d.employee_num = w.employee_num AND d.day = w.work_date 
+        WHERE 
+        (SELECT h.holiday FROM prdm_holiday h WHERE h.holiday = d.day) IS NULL
+        AND (w.work_date IS NULL OR w.work_days &lt; 1 OR w.state = 'reject')
+        <if test="deptId != null and deptId != '-1' ">
+			AND d.product_line_id = to_number(#{deptId},'999999999999')
+		</if>
+		<if test="deptId == null or deptId == '-1'">
+			AND d.product_line_id IN (15,16,17,21,22,25,31,32)
+		</if>
+        AND d.day BETWEEN to_date(#{startDate}, 'yyyy-MM-dd') AND to_date(#{endDate}, 'yyyy-MM-dd')
+    </select>
+    
+</mapper>
